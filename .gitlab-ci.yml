@@ -1,0 +1,44 @@
+# .gitlab-ci.yml
+image: node:20-alpine
+
+variables:
+  npm_config_cache: '$CI_PROJECT_DIR/.npm'
+
+cache:
+  key:
+    files:
+      - package-lock.json
+  paths:
+    - .npm/
+
+stages:
+  - build
+  - deploy
+
+# Сборка проекта
+build:
+  stage: build
+  script:
+    - npm ci --cache .npm --prefer-offline
+    - npm run build
+  artifacts:
+    paths:
+      - dist
+    expire_in: 1 hour
+
+# Деплой на GitLab Pages
+pages:
+  stage: deploy
+  dependencies:
+    - build
+  script:
+    # GitLab Pages требует чтобы артефакты лежали в папке "public"
+    - mv dist public
+  artifacts:
+    paths:
+      - public
+  only:
+    - master  # или master — в зависимости от названия вашей главной ветки
+  # environment:
+  #   name: production
+  #   url: https://username.gitlab.io/salary-calculator/
