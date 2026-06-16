@@ -1,21 +1,49 @@
 # .gitlab-ci.yml
 image: node:20-alpine
 
+# ============================================
+# ГЛОБАЛЬНОЕ УПРАВЛЕНИЕ PIPELINE
+# ============================================
+# Pipeline запустится ТОЛЬКО когда:
+# 1. Push/merge в ветку master
+# 2. Это НЕ merge request (чтобы избежать дублирования)
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
+    - if: $CI_COMMIT_BRANCH == "master"
+      when: always
+
+# ============================================
+# ПЕРЕМЕННЫЕ
+# ============================================
 variables:
   npm_config_cache: '$CI_PROJECT_DIR/.npm'
+  # Явно указываем публичный registry на случай если package-lock.json
+  # всё ещё ссылается на корпоративный artifactory
+  npm_config_registry: 'https://registry.npmjs.org/'
 
+# ============================================
+# КЕШИРОВАНИЕ
+# ============================================
 cache:
   key:
     files:
       - package-lock.json
+    prefix: npm
   paths:
     - .npm/
 
+# ============================================
+# СТАДИИ
+# ============================================
 stages:
   - build
   - deploy
 
-# Сборка проекта
+# ============================================
+# СБОРКА ПРОЕКТА
+# ============================================
 build:
   stage: build
   script:
@@ -26,7 +54,9 @@ build:
       - dist
     expire_in: 1 hour
 
-# Деплой на GitLab Pages
+# ============================================
+# ДЕПЛОЙ НА GITLAB PAGES
+# ============================================
 pages:
   stage: deploy
   dependencies:
@@ -37,8 +67,6 @@ pages:
   artifacts:
     paths:
       - public
-  only:
-    - master  # или master — в зависимости от названия вашей главной ветки
-  # environment:
-  #   name: production
-  #   url: https://username.gitlab.io/salary-calculator/
+  environment:
+    name: production
+    url: https://$CI_PROJECT_NAMESPACE.gitlab.io/$CI_PROJECT_NAME/
