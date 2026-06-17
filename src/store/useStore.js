@@ -119,7 +119,11 @@ const useStore = create((set, get) => ({
   addVacation: (vacation) => set((state) => {
     if (state.vacations.length >= MAX_VACATIONS) return state;
     return {
-      vacations: [...state.vacations, { ...vacation, id: nextVacationId++ }]
+      vacations: [...state.vacations, { 
+        ...vacation, 
+        type: vacation.type || 'paid', // 👈 тип по умолчанию — оплачиваемый
+        id: nextVacationId++ 
+      }]
     };
   }),
   removeVacation: (id) => set((state) => ({

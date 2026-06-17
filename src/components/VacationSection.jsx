@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Palmtree, Info } from 'lucide-react';
+import { Plus, Trash2, Palmtree, Info, Ban } from 'lucide-react';
 import useStore from '../store/useStore';
 import { formatNumber } from '../utils/taxCalculator';
 import { MAX_VACATIONS } from '../utils/defaults';
+
+const VACATION_TYPES = [
+  { value: 'paid',   label: 'Оплачиваемый',   emoji: '💰' },
+  { value: 'unpaid', label: 'Неоплачиваемый', emoji: '🚫' },
+];
 
 function getRateBg(rate) {
   if (rate <= 0.13) return 'bg-green-100  dark:bg-green-900/30  text-green-800  dark:text-green-300';
@@ -18,13 +23,11 @@ export default function VacationSection({ vacationCalcResults }) {
   const removeVacation = useStore(s => s.removeVacation);
   const year = useStore(s => s.year);
   const notify = useStore(s => s.notify);
-  const resetTrigger = useStore(s => s.resetTrigger); // 👈
-  
-  const [form, setForm] = useState({ startDate: '', endDate: '' });
+  const resetTrigger = useStore(s => s.resetTrigger);
+  const [form, setForm] = useState({ startDate: '', endDate: '', type: 'paid' });
 
-  // Сброс формы при resetToDefaults
   useEffect(() => {
-    setForm({ startDate: '', endDate: '' });
+    setForm({ startDate: '', endDate: '', type: 'paid' });
   }, [resetTrigger]);
 
   const checkOverlap = (newStart, newEnd) => {
@@ -61,9 +64,13 @@ export default function VacationSection({ vacationCalcResults }) {
       notify({ type: 'error', title: 'Пересечение дат', message: 'Указанный период пересекается с уже добавленным отпуском.' });
       return;
     }
-    addVacation({ startDate: form.startDate, endDate: form.endDate });
+    addVacation({ 
+      startDate: form.startDate, 
+      endDate: form.endDate, 
+      type: form.type 
+    });
     notify({ type: 'success', message: 'Отпуск добавлен', duration: 2500 });
-    setForm({ startDate: '', endDate: '' });
+    setForm({ startDate: '', endDate: '', type: 'paid' });
   };
 
   return (
@@ -75,16 +82,15 @@ export default function VacationSection({ vacationCalcResults }) {
           {vacations.length}/{MAX_VACATIONS}
         </span>
       </h2>
-
       <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg mb-4 text-xs text-amber-700 dark:text-amber-300">
         <Info size={14} className="mt-0.5 flex-shrink-0" />
         <span>
-          Отпускные = средний дневной заработок за 12 мес × календарные дни отпуска.
-          Даты отпусков не должны пересекаться.
+          <b>Оплачиваемый</b> — начисляются отпускные, рабочие дни вычитаются из зарплаты.<br/>
+          <b>Неоплачиваемый</b> — отпускные не начисляются, рабочие дни вычитаются из зарплаты.
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Начало отпуска</label>
           <input type="date" value={form.startDate}
@@ -94,6 +100,24 @@ export default function VacationSection({ vacationCalcResults }) {
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Конец отпуска</label>
           <input type="date" value={form.endDate}
             onChange={e => setForm(f => ({...f, endDate: e.target.value}))} className="input-field" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Тип</label>
+          <div className="flex bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden">
+            {VACATION_TYPES.map(t => (
+              <button
+                key={t.value}
+                onClick={() => setForm(f => ({ ...f, type: t.value }))}
+                className={`flex-1 px-2 py-2 text-xs font-medium transition-colors ${
+                  form.type === t.value
+                    ? 'bg-primary-600 text-white'
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                {t.emoji} {t.label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex items-end">
           <button onClick={handleAdd}
@@ -108,15 +132,33 @@ export default function VacationSection({ vacationCalcResults }) {
         <div className="space-y-3">
           {vacations.map(v => {
             const result = vacationCalcResults.find(r => r.id === v.id);
+            const isPaid = (v.type || 'paid') === 'paid';
+            const typeInfo = VACATION_TYPES.find(t => t.value === (v.type || 'paid'));
             return (
-              <div key={v.id} className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 animate-fade-in">
+              <div 
+                key={v.id} 
+                className={`border rounded-xl p-4 animate-fade-in ${
+                  isPaid 
+                    ? 'border-gray-200 dark:border-gray-700' 
+                    : 'border-amber-300 dark:border-amber-700/50 bg-amber-50/30 dark:bg-amber-900/10'
+                }`}
+              >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <Palmtree size={18} className="text-green-500 flex-shrink-0" />
+                    <Palmtree size={18} className={isPaid ? 'text-green-500' : 'text-amber-500'} />
                     <div>
-                      <p className="font-semibold text-gray-900 dark:text-white">
-                        {result?.startDateStr || '—'} – {result?.endDateStr || '—'}
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-gray-900 dark:text-white">
+                          {result?.startDateStr || '—'} – {result?.endDateStr || '—'}
+                        </p>
+                        <span className={`badge ${
+                          isPaid 
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' 
+                            : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                        }`}>
+                          {typeInfo?.emoji} {typeInfo?.label}
+                        </span>
+                      </div>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
                         {result ? `${result.calendarDays} календ. дн. (${result.workingDaysOff} рабочих)` : ''}
                       </p>
@@ -127,7 +169,8 @@ export default function VacationSection({ vacationCalcResults }) {
                     <Trash2 size={14} className="text-red-500" />
                   </button>
                 </div>
-                {result && (
+
+                {result && isPaid && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                       <p className="text-xs text-gray-500 dark:text-gray-400">Отпускные gross</p>
@@ -158,6 +201,16 @@ export default function VacationSection({ vacationCalcResults }) {
                         </span>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {result && !isPaid && (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-xs text-amber-800 dark:text-amber-200">
+                    <Ban size={14} className="mt-0.5 flex-shrink-0" />
+                    <span>
+                      Неоплачиваемый отпуск — отпускные не начисляются. 
+                      Рабочие дни ({result.workingDaysOff}) вычтены из зарплаты и аванса этого месяца.
+                    </span>
                   </div>
                 )}
               </div>
