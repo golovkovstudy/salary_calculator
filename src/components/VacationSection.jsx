@@ -128,9 +128,11 @@ export default function VacationSection({ vacationCalcResults }) {
         </div>
       </div>
 
-      {vacations.length > 0 ? (
-        <div className="space-y-3">
-          {vacations.map(v => {
+    {vacations.length > 0 ? (
+      <div className="space-y-3">
+        {[...vacations]
+          .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
+          .map(v => {
             const result = vacationCalcResults.find(r => r.id === v.id);
             const isPaid = (v.type || 'paid') === 'paid';
             const typeInfo = VACATION_TYPES.find(t => t.value === (v.type || 'paid'));
