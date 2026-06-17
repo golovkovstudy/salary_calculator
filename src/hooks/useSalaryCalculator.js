@@ -67,7 +67,6 @@ export function useSalaryCalculator() {
       firstHalf: 0, secondHalf: 0,
     }));
     const vacationResults = [];
-
     vacations.forEach((v) => {
       if (!v.startDate || !v.endDate) return;
       const start = new Date(v.startDate);
@@ -80,12 +79,10 @@ export function useSalaryCalculator() {
         salaryChanges,
         defaultGrossSalary
       );
-
       const vacResult = calculateVacationPay({
         startDate: v.startDate, endDate: v.endDate,
         last12MonthsSalaries: last12, holidays,
       });
-
       vacationResults.push({
         id: v.id, startDate: v.startDate, endDate: v.endDate,
         startDateStr: format(start, 'dd.MM.yyyy'),
@@ -101,7 +98,6 @@ export function useSalaryCalculator() {
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         const overlapStart = start > new Date(year, month, 1) ? start : new Date(year, month, 1);
         const overlapEnd = end < new Date(year, month, daysInMonth) ? end : new Date(year, month, daysInMonth);
-
         if (overlapStart.getDate() <= 15) {
           const fhEnd = overlapEnd.getDate() <= 15 ? overlapEnd : new Date(year, month, 15);
           const fhStr = `${year}-${String(month+1).padStart(2,'0')}-${String(overlapStart.getDate()).padStart(2,'0')}`;
@@ -119,7 +115,6 @@ export function useSalaryCalculator() {
 
     // 4. Все выплаты
     const payments = [];
-
     for (let m = 0; m < 12; m++) {
       const gross = monthGross[m];
       const { firstHalf, secondHalf } = halfMonths[m];
@@ -130,11 +125,9 @@ export function useSalaryCalculator() {
       const effectiveGross = totalWorkDays > 0 ? Math.round(gross * effTotal / totalWorkDays) : 0;
       const advanceGross = totalWorkDays > 0 ? Math.round(gross * effFirst / totalWorkDays) : 0;
       const salaryPartGross = effectiveGross - advanceGross;
-      // Аванс 25 числа, зарплата 10 числа следующего месяца
-      // Если выпадает на выходной/праздник — переносим на ближайший предыдущий рабочий день
+
       const rawAdvanceDate = new Date(year, m, 25);
       const rawSalaryDate = m + 1 >= 12 ? new Date(year + 1, 0, 10) : new Date(year, m + 1, 10);
-
       const advanceDate = getPreviousWorkingDay(rawAdvanceDate, holidays);
       const salaryDate = getPreviousWorkingDay(rawSalaryDate, holidays);
 
@@ -149,17 +142,18 @@ export function useSalaryCalculator() {
     // Отпускные
     vacationResults.forEach((vr) => {
       if (vr.vacationPayGross > 0) {
-        // По ТК РФ отпускные выплачиваются не позднее чем за 3 дня до начала отпуска.
-        // Если день выплаты выпадает на выходной — переносим на предыдущий рабочий день.
         const rawPayDate = new Date(vr.startDate);
-        rawPayDate.setDate(rawPayDate.getDate() - 3);
+        rawPayDate.setDate(rawPayDate.getDate() - 2);
         const payDate = getPreviousWorkingDay(rawPayDate, holidays);
+
+        if (payDate.getFullYear() !== year) return;
 
         payments.push({
           type: 'vacation',
           vacationId: vr.id,
           gross: vr.vacationPayGross,
           date: payDate,
+          month: payDate.getMonth(), // 👈 привязка к месяцу выплаты
           label: `Отпускные (${vr.startDateStr}–${vr.endDateStr})`,
         });
       }
@@ -177,6 +171,7 @@ export function useSalaryCalculator() {
           gross: b.isNet ? 0 : b.amount,
           inputAmount: b.amount, isNet: b.isNet || false,
           date: dateObj,
+          month: dateObj.getMonth(), // 👈 привязка к месяцу выплаты
           label: `${typeObj.label} (${format(dateObj, 'dd.MM.yyyy')})`,
           typeLabel: typeObj.label,
         });
@@ -222,9 +217,26 @@ export function useSalaryCalculator() {
       const ap = processedPayments.find(p => p.type === 'advance' && p.month === idx);
       const sp = processedPayments.find(p => p.type === 'salary' && p.month === idx);
 
+      // 👇 Отпускные, выплаченные в этом месяце
+      const vacPayments = processedPayments.filter(p => p.type === 'vacation' && p.month === idx);
+      const vacationNet   = vacPayments.reduce((s, p) => s + p.net, 0);
+      const vacationGross = vacPayments.reduce((s, p) => s + p.gross, 0);
+      const vacationDate  = vacPayments.length > 0 ? vacPayments[0].dateStr : '';
+      const vacationCount = vacPayments.length;
+
+      // 👇 Премии, выплаченные в этом месяце
+      const bonusPayments = processedPayments.filter(p => p.type === 'bonus' && p.month === idx);
+      const bonusNet   = bonusPayments.reduce((s, p) => s + p.net, 0);
+      const bonusGross = bonusPayments.reduce((s, p) => s + p.gross, 0);
+      const bonusDate  = bonusPayments.length > 0 ? bonusPayments[0].dateStr : '';
+      const bonusCount = bonusPayments.length;
+
+      // 👇 Суммарный net за месяц (зарплата + отпускные + премии)
+      const totalMonthNet = (ap ? ap.net : 0) + (sp ? sp.net : 0) + vacationNet + bonusNet;
+
       const advanceTax = ap ? ap.tax : 0;
-      const salaryTax = sp ? sp.tax : 0;
-      const totalTax = advanceTax + salaryTax;
+      const salaryTax  = sp ? sp.tax : 0;
+      const totalTax   = advanceTax + salaryTax;
 
       // Берём ставки из кумулятивного расчёта — они УЖЕ учитывают все предшествующие выплаты (включая премии)
       const apRate = ap ? ap.marginalRate : 0;
@@ -236,19 +248,18 @@ export function useSalaryCalculator() {
       const labels = [];
       if (ap && ap.rateLabel) labels.push(ap.rateLabel);
       if (sp && sp.rateLabel && sp.rateLabel !== (ap?.rateLabel || '')) labels.push(sp.rateLabel);
-
+      
       if (labels.length === 0) {
         rateLabel = gross > 0 ? '13%' : '—';
       } else if (labels.length === 1) {
         rateLabel = labels[0];
       } else {
-        // Убираем дубликаты
         const unique = [...new Set(labels)];
         rateLabel = unique.join(' / ');
       }
 
       const { firstHalf, secondHalf } = halfMonths[idx];
-      const effFirst = Math.max(0, firstHalf - vacationDaysPerHalfMonth[idx].firstHalf);
+      const effFirst  = Math.max(0, firstHalf  - vacationDaysPerHalfMonth[idx].firstHalf);
       const effSecond = Math.max(0, secondHalf - vacationDaysPerHalfMonth[idx].secondHalf);
 
       return {
@@ -276,6 +287,11 @@ export function useSalaryCalculator() {
         maxRate,
         rateLabel,
         cumulativeAfter: sp ? sp.cumulativeAfter : (ap ? ap.cumulativeAfter : 0),
+
+        // 👇 НОВЫЕ ПОЛЯ
+        vacationNet, vacationGross, vacationDate, vacationCount,
+        bonusNet,    bonusGross,    bonusDate,    bonusCount,
+        totalMonthNet,
       };
     });
 
@@ -296,9 +312,9 @@ export function useSalaryCalculator() {
       }));
 
     // 9. Отпускные
-    const vacPayments = processedPayments.filter(p => p.type === 'vacation');
+    const vacPaymentsAll = processedPayments.filter(p => p.type === 'vacation');
     const vacationCalcResults = vacationResults.map(vr => {
-      const payment = vacPayments.find(p => p.vacationId === vr.id);
+      const payment = vacPaymentsAll.find(p => p.vacationId === vr.id);
       return {
         ...vr,
         tax: payment ? payment.tax : 0,
@@ -313,6 +329,7 @@ export function useSalaryCalculator() {
     const totalTax = processedPayments.reduce((s, p) => s + p.tax, 0);
     const totalNet = totalGross - totalTax;
     const effectiveRate = totalGross > 0 ? totalTax / totalGross : 0;
+
     const totalSalaryGross = monthlyResults.reduce((s, m) => s + m.effectiveGross, 0);
     const totalBonusGross = bonusResults.reduce((s, b) => s + b.gross, 0);
     const totalVacationGross = vacationCalcResults.reduce((s, v) => s + v.vacationPayGross, 0);
