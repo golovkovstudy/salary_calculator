@@ -193,7 +193,9 @@ export default function BonusSection({ bonusResults }) {
               </tr>
             </thead>
             <tbody>
-              {bonuses.map(b => {
+            {[...bonuses]
+              .sort((a, b) => new Date(a.date) - new Date(b.date))
+              .map(b => {
                 const r = bonusResults.find(x => x.id === b.id);
                 const hasResult = r && r.dateStr && r.dateStr !== '—';
                 return (
