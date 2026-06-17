@@ -84,7 +84,9 @@ export function useSalaryCalculator() {
         last12MonthsSalaries: last12, holidays,
       });
       vacationResults.push({
-        id: v.id, startDate: v.startDate, endDate: v.endDate,
+        id: v.id,
+        type: v.type || 'paid', // 👈 ДОБАВЬ ЭТУ СТРОКУ
+        startDate: v.startDate, endDate: v.endDate,
         startDateStr: format(start, 'dd.MM.yyyy'),
         endDateStr: format(end, 'dd.MM.yyyy'),
         calendarDays: vacResult.calendarDays,
@@ -141,19 +143,18 @@ export function useSalaryCalculator() {
 
     // Отпускные
     vacationResults.forEach((vr) => {
+      // 👇 ДОБАВЬ ЭТИ 2 СТРОКИ — пропускаем неоплачиваемые отпуска
+      if (vr.type !== 'paid') return;
+      
       if (vr.vacationPayGross > 0) {
         const rawPayDate = new Date(vr.startDate);
-        rawPayDate.setDate(rawPayDate.getDate() - 2);
+        rawPayDate.setDate(rawPayDate.getDate() - 3);
         const payDate = getPreviousWorkingDay(rawPayDate, holidays);
-
-        if (payDate.getFullYear() !== year) return;
-
         payments.push({
           type: 'vacation',
           vacationId: vr.id,
           gross: vr.vacationPayGross,
           date: payDate,
-          month: payDate.getMonth(), // 👈 привязка к месяцу выплаты
           label: `Отпускные (${vr.startDateStr}–${vr.endDateStr})`,
         });
       }
@@ -312,11 +313,13 @@ export function useSalaryCalculator() {
       }));
 
     // 9. Отпускные
-    const vacPaymentsAll = processedPayments.filter(p => p.type === 'vacation');
+    const vacPayments = processedPayments.filter(p => p.type === 'vacation');
     const vacationCalcResults = vacationResults.map(vr => {
-      const payment = vacPaymentsAll.find(p => p.vacationId === vr.id);
+      const payment = vacPayments.find(p => p.vacationId === vr.id);
       return {
         ...vr,
+        // 👇 ДОБАВЬ ЭТУ СТРОКУ — для неоплачиваемых обнуляем сумму отпускных
+        vacationPayGross: vr.type === 'paid' ? vr.vacationPayGross : 0,
         tax: payment ? payment.tax : 0,
         net: payment ? payment.net : 0,
         payDateStr: payment ? payment.dateStr : '',
