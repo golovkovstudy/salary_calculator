@@ -2,7 +2,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const REPO_NAME = 'salary_calc';
+const REPO_NAME = 'salary_calculator';
 
 export default defineConfig({
   plugins: [react()],
